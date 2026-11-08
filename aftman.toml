@@ -1,0 +1,6 @@
+# Aftman mengelola versi tool dev (Rojo, dll) untuk project ini.
+# Install Aftman: https://github.com/LPGhatguy/aftman
+# Lalu jalankan `aftman install` di folder ini.
+
+[tools]
+rojo = "rojo-rbx/rojo@7.4.4"

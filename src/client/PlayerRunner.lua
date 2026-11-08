@@ -1,86 +1,230 @@
---!strict
 --[[
 	PlayerRunner.lua
-	------------------------------------------------------------
-	Mengelola karakter pemain yang lari otomatis.
-	Satu aksi (dari InputController) bersifat CONTEXT-SENSITIVE:
-	  - Di tanah  -> Jump
-	  - Di udara  -> Dash (dorongan ke depan)
-	Inilah yang membuat satu tombol terasa "chaos" tapi tetap dalam kendali.
+	Karakter lari otomatis. Satu tombol, aksi tergantung situasi:
+	  - Di tanah (atau baru saja lewat tepi) -> LOMPAT
+	  - Di udara                              -> DASH (melesat + melayang, 1x per lompatan)
+	Ada coyote time & jump buffer supaya kontrol terasa responsif dan "adil".
 --]]
 
-local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local GameConfig = require(game:GetService("ReplicatedStorage").Shared.GameConfig)
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local TrackGenerator = require(Shared:WaitForChild("TrackGenerator"))
 
 local PlayerRunner = {}
 PlayerRunner.__index = PlayerRunner
+
+local START_DISTANCE = -8 -- berdiri di platform start, sebelum lintasan
+
+local DISABLED_STATES = {
+	Enum.HumanoidStateType.Climbing,
+	Enum.HumanoidStateType.Swimming,
+	Enum.HumanoidStateType.FallingDown,
+	Enum.HumanoidStateType.Ragdoll,
+	Enum.HumanoidStateType.Seated,
+	Enum.HumanoidStateType.GettingUp,
+}
 
 function PlayerRunner.new(character: Model)
 	local self = setmetatable({}, PlayerRunner)
 	self.character = character
 	self.humanoid = character:WaitForChild("Humanoid") :: Humanoid
 	self.root = character:WaitForChild("HumanoidRootPart") :: BasePart
-
-	self.speed = GameConfig.StartSpeed
+	self.state = "Idle"
 	self.distance = 0
-	self.isDashing = false
-	self._dashEndTime = 0
-	self._alive = true
-	self._heartbeat = nil :: RBXScriptConnection?
+	self.speed = GameConfig.StartSpeed
+	self.dashUsed = false
+	self.dashEnd = 0
+	self.lastJump = -10
+	self.lastGrounded = 0
+	self.jumpBufferUntil = 0
+	self.wasGrounded = true
+	self._saved = nil
+
+	-- callback yang dipasang oleh Main
+	self.OnJump = nil
+	self.OnDash = nil
+	self.OnLand = nil
+	self.OnCrash = nil
+
+	local h = self.humanoid
+	h.UseJumpPower = true
+	h.JumpPower = GameConfig.JumpPower
+	h.AutoRotate = false
+	for _, st in ipairs(DISABLED_STATES) do
+		h:SetStateEnabled(st, false)
+	end
+
+	self._overlap = OverlapParams.new()
+	self._overlap.FilterType = Enum.RaycastFilterType.Include
+	self._overlap.MaxParts = 4
 	return self
 end
 
--- Dipanggil tiap frame untuk menggerakkan karakter maju otomatis
-function PlayerRunner:_update(dt: number)
-	if not self._alive then
-		return
-	end
-
-	-- naikkan kecepatan seiring waktu (difficulty ramp)
-	self.speed = math.min(GameConfig.MaxSpeed, self.speed + GameConfig.SpeedRampPerSecond * dt)
-
-	-- hitung kecepatan maju (dash memberi boost sementara)
-	local forwardSpeed = self.speed
-	if self.isDashing then
-		if os.clock() >= self._dashEndTime then
-			self.isDashing = false
-		else
-			forwardSpeed += GameConfig.DashSpeed
-		end
-	end
-
-	-- gerakkan karakter ke arah depan (sumbu +Z dunia, sesuaikan dengan map-mu)
-	local moveDir = Vector3.new(0, 0, -1)
-	self.humanoid:Move(moveDir, false)
-	self.humanoid.WalkSpeed = forwardSpeed
-
-	self.distance += forwardSpeed * dt
+function PlayerRunner:SetHazardFolder(folder: Instance)
+	self._overlap.FilterDescendantsInstances = { folder }
 end
 
--- Aksi context-sensitive dari satu tombol
-function PlayerRunner:DoAction(): string
-	if not self._alive then
-		return ""
+function PlayerRunner:_rootHeight(): number
+	if self.humanoid.RigType == Enum.HumanoidRigType.R15 then
+		return self.humanoid.HipHeight + self.root.Size.Y / 2
+	end
+	return 3
+end
+
+function PlayerRunner:_placeAt(distance: number)
+	self.root.Anchored = true
+	self.root.AssemblyLinearVelocity = Vector3.zero
+	self.character:PivotTo(CFrame.new(0, GameConfig.TrackY + self:_rootHeight() + 0.05, -distance))
+end
+
+function PlayerRunner:_hide()
+	if self._saved then
+		return
+	end
+	self._saved = {}
+	for _, d in ipairs(self.character:GetDescendants()) do
+		if d:IsA("BasePart") or d:IsA("Decal") then
+			self._saved[d] = d.Transparency
+			d.Transparency = 1
+		end
+	end
+end
+
+function PlayerRunner:_show()
+	if not self._saved then
+		return
+	end
+	for inst, t in pairs(self._saved) do
+		if inst.Parent then
+			inst.Transparency = t
+		end
+	end
+	self._saved = nil
+end
+
+function PlayerRunner:ResetToStart()
+	self:_show()
+	self.state = "Idle"
+	self.distance = 0
+	self.speed = GameConfig.StartSpeed
+	self.dashUsed = false
+	self.dashEnd = 0
+	self:_placeAt(START_DISTANCE)
+end
+
+function PlayerRunner:Revive(atDistance: number)
+	self:_show()
+	self.state = "Idle"
+	self.dashUsed = false
+	self.dashEnd = 0
+	self:_placeAt(atDistance)
+end
+
+function PlayerRunner:Run()
+	self.state = "Running"
+	self.root.Anchored = false
+	self.lastGrounded = os.clock()
+	self.wasGrounded = true
+	self.speed = TrackGenerator.SpeedAt(self.distance)
+	self.root.AssemblyLinearVelocity = Vector3.new(0, 0, -self.speed)
+end
+
+function PlayerRunner:_jump(now: number)
+	local v = self.root.AssemblyLinearVelocity
+	self.humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	self.root.AssemblyLinearVelocity = Vector3.new(v.X, GameConfig.JumpPower, v.Z)
+	self.lastJump = now
+	self.wasGrounded = false
+	if self.OnJump then
+		self.OnJump(self.root.Position)
+	end
+end
+
+function PlayerRunner:_isGrounded(now: number): boolean
+	return self.humanoid.FloorMaterial ~= Enum.Material.Air and (now - self.lastJump) > 0.12
+end
+
+-- Satu-satunya input game
+function PlayerRunner:DoAction(): string?
+	if self.state ~= "Running" then
+		return nil
+	end
+	local now = os.clock()
+	local coyote = (now - self.lastGrounded) < GameConfig.CoyoteTime and (now - self.lastJump) > 0.25
+	if self:_isGrounded(now) or coyote then
+		self:_jump(now)
+		return "Jump"
+	end
+	if not self.dashUsed then
+		self.dashUsed = true
+		self.dashEnd = now + GameConfig.DashDuration
+		if self.OnDash then
+			self.OnDash(self.root.Position)
+		end
+		return "Dash"
+	end
+	self.jumpBufferUntil = now + GameConfig.JumpBuffer
+	return "Buffered"
+end
+
+function PlayerRunner:_crash(reason: string, pos: Vector3)
+	self.state = "Crashed"
+	self.root.Anchored = true
+	self:_hide()
+	if self.OnCrash then
+		self.OnCrash(reason, pos)
+	end
+end
+
+function PlayerRunner:Update(_dt: number)
+	if self.state ~= "Running" then
+		return
+	end
+	local now = os.clock()
+	local root, h = self.root, self.humanoid
+	local pos = root.Position
+
+	self.distance = math.max(self.distance, -pos.Z)
+	self.speed = TrackGenerator.SpeedAt(self.distance)
+
+	local grounded = self:_isGrounded(now)
+	if grounded then
+		self.lastGrounded = now
+		self.dashUsed = false
+		if not self.wasGrounded and self.OnLand then
+			self.OnLand(pos)
+		end
+		self.wasGrounded = true
+		if now < self.jumpBufferUntil then
+			self.jumpBufferUntil = 0
+			self:_jump(now)
+		end
+	else
+		self.wasGrounded = false
 	end
 
-	local state = self.humanoid:GetState()
-	local onGround = state == Enum.HumanoidStateType.Running
-		or state == Enum.HumanoidStateType.RunningNoPhysics
-		or state == Enum.HumanoidStateType.Landed
+	local dashing = now < self.dashEnd
+	local forward = self.speed + (if dashing then GameConfig.DashSpeedBonus else 0)
+	h.WalkSpeed = forward
+	h:Move(Vector3.new(0, 0, -1), false)
 
-	if onGround then
-		-- di tanah -> lompat
-		self.humanoid.JumpPower = GameConfig.JumpPower
-		self.humanoid.Jump = true
-		return GameConfig.ActionType.Jump
-	else
-		-- di udara -> dash
-		if not self.isDashing then
-			self.isDashing = true
-			self._dashEndTime = os.clock() + GameConfig.DashDuration
-		end
-		return GameConfig.ActionType.Dash
+	local vy = root.AssemblyLinearVelocity.Y
+	if dashing then
+		vy = math.max(vy, 0) -- melayang: tidak jatuh selama dash
+	end
+	root.AssemblyLinearVelocity = Vector3.new(-pos.X * 6, vy, -forward)
+
+	if pos.Y < GameConfig.KillY then
+		self:_crash("fall", pos)
+		return
+	end
+	local box = root.CFrame * CFrame.new(0, -0.6, 0)
+	local hits = Workspace:GetPartBoundsInBox(box, Vector3.new(2, 4.6, 2), self._overlap)
+	if #hits > 0 then
+		self:_crash("hit", pos)
 	end
 end
 
@@ -88,27 +232,17 @@ function PlayerRunner:GetScore(): number
 	return math.floor(self.distance)
 end
 
-function PlayerRunner:Start()
-	self._heartbeat = RunService.Heartbeat:Connect(function(dt)
-		self:_update(dt)
-	end)
-
-	-- deteksi mati (jatuh)
-	self.humanoid.Died:Connect(function()
-		self:Stop()
-	end)
+function PlayerRunner:GetSpeedRatio(): number
+	return math.clamp(
+		(self.speed - GameConfig.StartSpeed) / (GameConfig.MaxSpeed - GameConfig.StartSpeed),
+		0,
+		1
+	)
 end
 
-function PlayerRunner:IsAlive(): boolean
-	return self._alive
-end
-
-function PlayerRunner:Stop()
-	self._alive = false
-	if self._heartbeat then
-		self._heartbeat:Disconnect()
-		self._heartbeat = nil
-	end
+function PlayerRunner:Destroy()
+	self.state = "Dead"
+	self.OnJump, self.OnDash, self.OnLand, self.OnCrash = nil, nil, nil, nil
 end
 
 return PlayerRunner

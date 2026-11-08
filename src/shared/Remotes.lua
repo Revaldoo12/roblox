@@ -25,7 +25,7 @@ local REMOTE_NAMES = {
 	"ScoreValidated", -- server -> client : skor resmi setelah divalidasi
 	"LeaderboardUpdated", -- server -> client : update papan skor
 	"GrantRevive", -- server -> client : pemain membeli revive
-	"GrantSkin", -- server -> client : pemain membeli/mengaktifkan skin
+	"PerksUpdated", -- server -> client : status Game Pass (2x skor, rainbow trail)
 }
 
 function Remotes.Get(name: string): RemoteEvent

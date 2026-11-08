@@ -1,36 +1,28 @@
---!strict
 --[[
 	Main.server.lua
-	------------------------------------------------------------
-	Titik masuk SERVER.
-	  1. Membuat semua RemoteEvent.
-	  2. Memvalidasi skor yang dikirim client (anti-cheat dasar).
-	  3. Menyimpan high score pemain ke DataStore (persisten).
+	  1. Membuat RemoteEvent & menyiapkan dunia, monetisasi, leaderboard.
+	  2. Memvalidasi skor dari client (anti-cheat dasar).
+	  3. Menyimpan high score ke DataStore + leaderstats.
 
-	CATATAN ANTI-CHEAT:
-	Karena game ini client-authoritative untuk gerakan (demi responsivitas),
-	server tidak bisa 100% memverifikasi. Tapi kita menolak skor yang MUSTAHIL
-	secara fisika: skor maksimum = kecepatan_maks * durasi. Skor di atas itu
-	pasti hasil cheat dan ditolak. Ini garis pertahanan pertama yang murah.
+	Anti-cheat: durasi run diukur di SERVER (dari RunStarted ke RunEnded).
+	Skor di atas (kecepatan maks + dash) x durasi mustahil secara fisika -> ditolak.
 --]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataStoreService = game:GetService("DataStoreService")
 
-local Remotes = require(ReplicatedStorage.Shared.Remotes)
-local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Remotes = require(Shared:WaitForChild("Remotes"))
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
 
--- modul server tambahan
 local serverFolder = script.Parent
-local TrackBuilder = require(serverFolder:WaitForChild("TrackBuilder"))
+local Environment = require(serverFolder:WaitForChild("Environment"))
 local Monetization = require(serverFolder:WaitForChild("Monetization"))
 local GlobalLeaderboard = require(serverFolder:WaitForChild("GlobalLeaderboard"))
 
 Remotes.Init()
-
--- bangun map + inisialisasi sistem
-TrackBuilder.Build()
+Environment.Setup()
 Monetization.Init()
 GlobalLeaderboard.Init()
 
@@ -38,8 +30,7 @@ local RunStarted = Remotes.Get("RunStarted")
 local RunEnded = Remotes.Get("RunEnded")
 local ScoreValidated = Remotes.Get("ScoreValidated")
 
--- DataStore untuk high score (dibungkus pcall supaya aman di Studio tanpa API akses)
-local highScoreStore: DataStore? = nil
+local highScoreStore = nil
 do
 	local ok, store = pcall(function()
 		return DataStoreService:GetDataStore("OBC_HighScores_v1")
@@ -51,8 +42,8 @@ do
 	end
 end
 
--- state ronde per pemain: kapan mulai, untuk validasi durasi
-local runState: { [Player]: { startTime: number } } = {}
+-- state run per pemain
+local runState: { [Player]: { startTime: number, ended: boolean, revivePending: boolean } } = {}
 
 local function loadHighScore(player: Player): number
 	if not highScoreStore then
@@ -71,69 +62,92 @@ local function saveHighScore(player: Player, score: number)
 	if not highScoreStore then
 		return
 	end
-	pcall(function()
-		highScoreStore:UpdateAsync("hs_" .. player.UserId, function(old)
-			old = old or 0
-			return math.max(old, score)
+	task.spawn(function()
+		pcall(function()
+			highScoreStore:UpdateAsync("hs_" .. player.UserId, function(old)
+				return math.max(tonumber(old) or 0, score)
+			end)
 		end)
 	end)
 end
 
+Monetization.OnReviveGranted = function(player: Player)
+	local s = runState[player]
+	if s then
+		s.revivePending = true
+	end
+end
+
 RunStarted.OnServerEvent:Connect(function(player)
-	runState[player] = { startTime = os.clock() }
+	runState[player] = { startTime = os.clock(), ended = false, revivePending = false }
 end)
 
-RunEnded.OnServerEvent:Connect(function(player, reportedScore: any, reportedDuration: any)
-	-- validasi tipe (client bisa mengirim apa saja — jangan percaya)
-	if typeof(reportedScore) ~= "number" or typeof(reportedDuration) ~= "number" then
-		ScoreValidated:FireClient(player, 0, false)
+RunEnded.OnServerEvent:Connect(function(player, reportedScore: any)
+	local stats = player:FindFirstChild("leaderstats")
+	local bestValue = stats and stats:FindFirstChild("Best")
+	local currentBest = if bestValue then bestValue.Value else 0
+
+	local s = runState[player]
+	local valid = typeof(reportedScore) == "number"
+		and reportedScore == reportedScore -- bukan NaN
+		and reportedScore >= 0
+		and s ~= nil
+		and (not s.ended or s.revivePending)
+
+	if not valid then
+		ScoreValidated:FireClient(player, 0, false, currentBest)
 		return
 	end
-	if reportedScore < 0 or reportedDuration < 0 then
-		ScoreValidated:FireClient(player, 0, false)
+
+	local duration = os.clock() - s.startTime
+	local maxPossible = (GameConfig.MaxSpeed + GameConfig.DashSpeedBonus) * duration * 1.1 + 20
+	s.ended = true
+	s.revivePending = false
+
+	if reportedScore > maxPossible then
+		warn(("[OBC] Skor ditolak dari %s: %d (maks wajar ~%d)"):format(
+			player.Name,
+			math.floor(reportedScore),
+			math.floor(maxPossible)
+		))
+		ScoreValidated:FireClient(player, 0, false, currentBest)
 		return
 	end
 
-	-- batas fisika: jarak maksimum = kecepatan maksimum * durasi (+ sedikit toleransi)
-	local maxPossible = GameConfig.MaxSpeed * reportedDuration * 1.1 + 10
-	local accepted = reportedScore <= maxPossible
-
-	-- cek durasi server-side (mencegah fire RunEnded tanpa RunStarted)
-	local state = runState[player]
-	if not state then
-		accepted = false
-	end
-	runState[player] = nil
-
-	local officialScore = accepted and math.floor(reportedScore) or 0
-
-	-- Game Pass "Double Score": gandakan skor resmi (dihitung di server = aman)
-	if accepted and Monetization.OwnsDoubleScore(player) then
-		officialScore *= 2
+	local official = math.floor(reportedScore)
+	if Monetization.OwnsDoubleScore(player) then
+		official *= 2
 	end
 
-	if accepted and officialScore > 0 then
-		saveHighScore(player, officialScore)
-		GlobalLeaderboard.Submit(player, officialScore)
+	if official > currentBest then
+		if bestValue then
+			bestValue.Value = official
+		end
+		currentBest = official
+		saveHighScore(player, official)
+	end
+	if official > 0 then
+		task.spawn(GlobalLeaderboard.Submit, player, official)
 	end
 
-	ScoreValidated:FireClient(player, officialScore, accepted)
-	if not accepted then
-		warn(("[OBC] Skor ditolak dari %s: %s (maks wajar ~%d)"):format(player.Name, tostring(reportedScore), math.floor(maxPossible)))
-	end
+	ScoreValidated:FireClient(player, official, true, currentBest)
 end)
 
--- leaderstats agar high score tampil di menu pemain Roblox
-Players.PlayerAdded:Connect(function(player)
+local function onPlayerAdded(player: Player)
 	local stats = Instance.new("Folder")
 	stats.Name = "leaderstats"
-	stats.Parent = player
-
 	local best = Instance.new("IntValue")
 	best.Name = "Best"
-	best.Value = loadHighScore(player)
+	best.Value = 0
 	best.Parent = stats
-end)
+	stats.Parent = player
+	best.Value = loadHighScore(player)
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+for _, p in ipairs(Players:GetPlayers()) do
+	task.spawn(onPlayerAdded, p)
+end
 
 Players.PlayerRemoving:Connect(function(player)
 	runState[player] = nil

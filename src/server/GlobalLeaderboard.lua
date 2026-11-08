@@ -16,7 +16,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
 local GlobalLeaderboard = {}
 
-local TOP_COUNT = 100
+local TOP_COUNT = 10 -- jumlah yang ditampilkan di panel
 local REFRESH_INTERVAL = 60 -- detik
 
 local orderedStore: OrderedDataStore? = nil
@@ -38,20 +38,25 @@ function GlobalLeaderboard.Submit(player: Player, score: number)
 	if not orderedStore or score <= 0 then
 		return
 	end
+	local store = orderedStore
 	pcall(function()
-		local key = tostring(player.UserId)
-		local current = orderedStore:GetAsync(key)
-		if not current or score > current then
-			orderedStore:SetAsync(key, score)
-		end
+		store:UpdateAsync(tostring(player.UserId), function(old)
+			return math.max(tonumber(old) or 0, math.floor(score))
+		end)
 	end)
 end
 
+local nameCache: { [number]: string } = {}
+
 local function usernameFromUserId(userId: number): string
+	if nameCache[userId] then
+		return nameCache[userId]
+	end
 	local ok, name = pcall(function()
 		return Players:GetNameFromUserIdAsync(userId)
 	end)
 	if ok and typeof(name) == "string" then
+		nameCache[userId] = name
 		return name
 	end
 	return "Player" .. tostring(userId)

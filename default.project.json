@@ -2,7 +2,6 @@
   "name": "OneButtonChaos",
   "tree": {
     "$className": "DataModel",
-
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "Shared": {
@@ -12,14 +11,12 @@
         "$className": "Folder"
       }
     },
-
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "Server": {
         "$path": "src/server"
       }
     },
-
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "StarterPlayerScripts": {
@@ -27,13 +24,6 @@
         "Client": {
           "$path": "src/client"
         }
-      }
-    },
-
-    "Workspace": {
-      "$className": "Workspace",
-      "$properties": {
-        "Gravity": 110
       }
     }
   }

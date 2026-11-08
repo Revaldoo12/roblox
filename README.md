@@ -1,111 +1,72 @@
 # 🎮 One Button Chaos
 
-Game Roblox endless-runner dengan **satu tombol untuk semua aksi**. Karakter lari otomatis, semakin cepat seiring waktu. Satu tombol (Space / klik / tap / tombol A gamepad) melakukan aksi berbeda tergantung situasi:
+Endless runner Roblox bertema **kota neon malam hari**. Karakter lari otomatis dan makin cepat. Kamu cuma punya **satu tombol** (Space / klik / tap / tombol A gamepad):
 
-- **Di tanah →** Lompat
-- **Di udara →** Dash (dorongan ke depan)
+- **Di tanah → LOMPAT**
+- **Di udara → DASH** (melesat + melayang, 1x per lompatan, untuk menyeberangi jurang panjang)
 
-Simpel dipahami, susah dikuasai — resep klasik game viral yang enak di-clip untuk TikTok/Shorts.
+## ✨ Isi game
 
----
+| Bagian | Isi |
+|---|---|
+| Lintasan | Endless, dibangun terus di depan pemain: lantai kaca gelap, rel neon, garis grid, gerbang neon, gedung kota cyber, grid synthwave di bawah |
+| Zona | Warna dunia berganti tiap 800 studs: Neon City → Sunset Drive → Toxic Grid → Void Palace → Overdrive |
+| Rintangan | Dinding neon (lompat), pagar laser (lompat), jurang pendek (lompat), jurang panjang (lompat + dash), dinding ganda, dinding + jurang, crusher yang menghantam (timing) |
+| Keadilan | Jarak rintangan dihitung dari fisika lompat & dash pada kecepatan saat itu, jadi selalu bisa dilewati. Hitbox sedikit lebih kecil dari visual. Ada coyote time & jump buffer |
+| Efek | Trail neon, cahaya karakter, debu lompat, percikan dash, ledakan + serpihan saat crash, partikel angin, kamera FOV melebar saat ngebut, guncangan kamera, flash layar |
+| UI | Layar judul animasi, kartu cara main, hitung mundur 3-2-1-GO, skor + bar kecepatan, popup zona & milestone, kartu Game Over (NEW BEST, Main Lagi, Revive), papan peringkat Top 10 |
+| Petunjuk | Label "LOMPAT ⬆" / "LOMPAT + DASH ⚡" muncul di awal permainan sebagai tutorial |
 
-## 📂 Struktur Project
+## 📂 Struktur
 
 ```
-OneButtonChaos/
-├── default.project.json        # Konfigurasi Rojo (sync ke Studio)
-├── src/
-│   ├── shared/                 # ReplicatedStorage (dipakai client & server)
-│   │   ├── GameConfig.lua       # SEMUA tuning/balancing ada di sini
-│   │   ├── Remotes.lua          # Manajemen RemoteEvent
-│   │   └── ObstacleGenerator.lua# Pola rintangan deterministik (seed)
-│   ├── client/                 # StarterPlayerScripts
-│   │   ├── Main.client.lua      # Game loop utama (perekat semua modul)
-│   │   ├── InputController.lua  # INTI: satu input lintas-platform
-│   │   ├── PlayerRunner.lua     # Gerak otomatis + aksi context-sensitive
-│   │   └── HUD.lua              # Skor & UI (dibuat via kode, no manual UI)
-│   └── server/
-│       ├── Main.server.lua      # Perekat server: validasi skor + rangkai sistem
-│       ├── TrackBuilder.lua     # Bangun SELURUH map via kode (no manual build!)
-│       ├── Monetization.lua     # Game Pass & Developer Products
-│       └── GlobalLeaderboard.lua# Papan skor global top-100 (OrderedDataStore)
-└── README.md
+src/
+├── shared/                    (ReplicatedStorage.Shared)
+│   ├── GameConfig.lua          tuning, palet warna, suara, ID monetisasi
+│   ├── TrackGenerator.lua      pola rintangan deterministik & adil
+│   └── Remotes.lua             RemoteEvent
+├── client/                    (StarterPlayerScripts.Client)
+│   ├── Main.client.lua         state machine: Menu → Countdown → Lari → Game Over
+│   ├── InputController.lua     satu input lintas-platform
+│   ├── PlayerRunner.lua        gerak, lompat, dash, deteksi tabrakan
+│   ├── TrackStreamer.lua       bangun/hapus lintasan, rintangan, dekorasi
+│   ├── Effects.lua             suara, partikel, trail
+│   ├── CameraController.lua    kamera sinematik
+│   └── HUD.lua                 semua UI
+└── server/                    (ServerScriptService.Server)
+    ├── Main.server.lua         validasi skor + high score
+    ├── Environment.lua         lighting neon, platform start, collision group
+    ├── Monetization.lua        Game Pass & Developer Product
+    └── GlobalLeaderboard.lua   papan peringkat global
 ```
 
----
+## 🚀 Menjalankan
 
-## 🚀 Cara Menjalankan (via Rojo)
+1. Di folder project: `rojo serve` (atau `.\rojo.exe serve` di Windows).
+2. Roblox Studio → **New → Baseplate** → Plugins → **Rojo → Connect**.
+3. Tekan **Play**.
 
-[Rojo](https://rojo.space/) adalah tool standar untuk menyinkronkan kode dari folder ini ke Roblox Studio.
+> Saat server mulai, `Environment.lua` **menghapus Baseplate & SpawnLocation bawaan template** supaya jurang benar-benar bisa bikin jatuh. Ini disengaja.
 
-1. **Install Rojo** (butuh [Aftman](https://github.com/LPGhatguy/aftman) atau unduh biner Rojo):
-   ```bash
-   aftman add rojo-rbx/rojo
-   ```
-2. **Install plugin Rojo** di Roblox Studio (dari Toolbox atau `rojo plugin install`).
-3. Dari folder project ini, jalankan:
-   ```bash
-   rojo serve
-   ```
-4. Di Studio, buka panel **Rojo** → **Connect**. Semua skrip akan muncul di tempatnya.
+Kalau sebelumnya sudah sync versi lama, hapus skrip lama yang tersisa di Studio (`TrackBuilder`, `ObstacleGenerator`) bila masih ada.
 
-> Tidak mau pakai Rojo? Kamu bisa salin isi tiap file `.lua` ke Script/ModuleScript yang sesuai di Studio secara manual (lihat lokasi di `default.project.json`).
+## 🎛️ Tuning
 
----
-
-## 🗺️ Map Dibangun Otomatis (tidak perlu susun manual!)
-
-`TrackBuilder.lua` membangun **seluruh map lewat kode** saat server start:
-lantai lintasan, garis tengah neon, SpawnLocation, zona mati, dan semua
-rintangan (Low = dilompati, High = di-dash). Begitu kamu Connect Rojo dan tekan
-Play, game langsung bisa dimainkan.
-
-Mau ubah tampilan/panjang/kepadatan? Edit konstanta di atas `TrackBuilder.Build`
-(`TRACK_LENGTH`, dll) dan tuning di `src/shared/GameConfig.lua`.
-
-> **Endless sejati:** untuk prototipe & publish awal, lintasan panjang 4000 studs
-> sudah cukup. Untuk endless tak terbatas, ubah TrackBuilder agar men-stream
-> "chunk" baru di depan pemain dan menghapus yang di belakang.
+Semua angka ada di `src/shared/GameConfig.lua`: kecepatan, lompat, dash, panjang zona, warna, suara. Suara memakai file bawaan Roblox (`rbxasset://sounds/...`). Untuk musik, isi `MusicId` dengan ID musik berlisensi dari Creator Store.
 
 ## 💰 Monetisasi
 
-`Monetization.lua` sudah menyiapkan kerangka:
-- **Game Pass "Double Score"** — skor x2 (digandakan di SERVER = aman dari cheat).
-- **Dev Product "Revive"** — hidup lagi 1x tanpa reset skor.
-- **Dev Product "Skin Neon"** — trail warna-warni (clippable!).
+Isi ID di `GameConfig.lua` (0 = tombol disembunyikan):
 
-Cara aktifkan: buat item di Creator Hub, lalu salin ID-nya ke tabel
-`GamePasses` / `Products` di `Monetization.lua` (ganti angka `0`).
+- `GamePassIds.DoubleScore`: skor resmi x2 (dihitung di server)
+- `GamePassIds.RainbowTrail`: trail pelangi
+- `ProductIds.Revive`: lanjut dari titik crash, 1x per run. Receipt dicatat di DataStore agar tidak diproses dua kali.
 
-> ⚠️ **Produksi:** `ProcessReceipt` sebaiknya menyimpan receipt ke DataStore agar
-> pembelian consumable tidak diproses dua kali saat server restart (ada TODO di kode).
+## ✅ Checklist publish
 
-## 🏆 Leaderboard Global
-
-`GlobalLeaderboard.lua` menyimpan skor tertinggi antar SEMUA pemain via
-OrderedDataStore dan menampilkan **Top 10** di panel kiri atas (dibuat otomatis
-oleh `HUD.lua`). Refresh tiap 60 detik. Butuh **API Services aktif**.
-
----
-
-## ✅ Checklist Siap Publish ke Roblox
-
-- [ ] **Game bisa dimainkan** full loop: start → main → game over → ulangi.
-- [ ] **Aktifkan API Services** (Game Settings → Security) agar DataStore high score jalan.
-- [ ] **Uji di mobile** (emulator Studio) — pastikan tap bekerja.
-- [ ] **Thumbnail & ikon** menarik (ini SANGAT menentukan klik di Roblox).
-- [ ] **Judul & deskripsi** dengan kata kunci ("one button", "hard", "rage").
-- [ ] **Genre** di Game Settings diisi.
-- [ ] **Patuhi [Community Standards](https://en.help.roblox.com/hc/en-us/articles/203313410) Roblox.**
-- [ ] (Opsional) **Monetisasi:** Game Passes / Developer Products untuk skin, revive, atau 2x score. Payout lewat **DevEx** (butuh umur & syarat tertentu).
-- [ ] **Publish:** File → Publish to Roblox → set ke **Public** saat siap.
-
----
-
-## 💡 Ide Pengembangan (bikin makin beda & viral)
-
-- **Skin karakter** yang kelihatan jelas di clip pendek.
-- **Daily challenge** dengan seed harian (pakai `ObstacleGenerator` + seed = tanggal) → semua pemain dapat pola sama, bisa adu skor.
-- **Ghost race:** tampilkan "bayangan" skor terbaikmu.
-- **Trail efek** warna-warni saat dash untuk visual yang clippable.
-- **Haptics/sound** yang memuaskan tiap aksi — kunci rasa "nagih".
+- [ ] Game Settings → Security → **Enable Studio Access to API Services** (high score & leaderboard)
+- [ ] Tes di emulator HP (Test → Device) — tap harus jalan
+- [ ] Ikon & thumbnail menarik (screenshot zona neon + crash)
+- [ ] Judul/deskripsi dengan kata kunci: "one button", "hard", "runner", "rage"
+- [ ] Isi ID Game Pass / Product kalau mau monetisasi
+- [ ] File → Publish to Roblox → set **Public**

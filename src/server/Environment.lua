@@ -69,12 +69,12 @@ local function setupLighting()
 	sky.Parent = Lighting
 
 	local atmo = Instance.new("Atmosphere")
-	atmo.Density = 0.28
-	atmo.Offset = 0.1
+	atmo.Density = 0.2
+	atmo.Offset = 0.08
 	atmo.Color = zone.AtmoColor
 	atmo.Decay = zone.AtmoDecay
-	atmo.Glare = 0.4
-	atmo.Haze = 1.4
+	atmo.Glare = 0.3
+	atmo.Haze = 0.6
 	atmo.Parent = Lighting
 
 	local bloom = Instance.new("BloomEffect")
@@ -89,9 +89,9 @@ local function setupLighting()
 	rays.Parent = Lighting
 
 	local cc = Instance.new("ColorCorrectionEffect")
-	cc.Brightness = 0.02
-	cc.Contrast = 0.04
-	cc.Saturation = -0.05
+	cc.Brightness = 0
+	cc.Contrast = 0.1
+	cc.Saturation = 0.12
 	cc.Parent = Lighting
 
 	local terrain = Workspace:FindFirstChildOfClass("Terrain")

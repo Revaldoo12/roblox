@@ -40,16 +40,16 @@ GameConfig.MilestoneEvery = 1000
 
 -- ===== MATERIAL & WARNA (lembut, hangat) =====
 GameConfig.Colors = {
-	PathA = Color3.fromRGB(236, 228, 212), -- batu krem
-	PathB = Color3.fromRGB(226, 216, 198),
-	PathEdge = Color3.fromRGB(196, 182, 160),
+	PathA = Color3.fromRGB(226, 206, 176), -- batu pasir hangat
+	PathB = Color3.fromRGB(212, 190, 160),
+	PathEdge = Color3.fromRGB(170, 146, 118),
 	Wood = Color3.fromRGB(168, 124, 92),
 	WoodDark = Color3.fromRGB(128, 92, 70),
 	Rope = Color3.fromRGB(214, 196, 160),
 	Cloud = Color3.fromRGB(250, 250, 252),
 	CloudShade = Color3.fromRGB(228, 234, 244),
-	Grass = Color3.fromRGB(150, 196, 132),
-	GrassDark = Color3.fromRGB(122, 170, 112),
+	Grass = Color3.fromRGB(132, 190, 112),
+	GrassDark = Color3.fromRGB(106, 160, 96),
 	Rock = Color3.fromRGB(176, 164, 152),
 	RockDark = Color3.fromRGB(142, 132, 124),
 	Leaf = Color3.fromRGB(132, 184, 120),

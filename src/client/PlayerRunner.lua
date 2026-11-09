@@ -243,6 +243,10 @@ function PlayerRunner:GetSpeedRatio(): number
 	)
 end
 
+function PlayerRunner:IsOnGround(): boolean
+	return self.state == "Running" and self:_isGrounded(os.clock())
+end
+
 -- Dipanggil tiap frame di semua state (menu, countdown, lari, crash)
 function PlayerRunner:UpdateAnimation()
 	if self.state ~= "Running" then

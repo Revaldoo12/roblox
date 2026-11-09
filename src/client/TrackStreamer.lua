@@ -15,6 +15,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -74,11 +75,13 @@ local function crusherLift(u: number): number
 	return CRUSH_UP * (k * k * (3 - 2 * k)) -- naik perlahan
 end
 
-function TrackStreamer.new(seed: number, lowDetail: boolean?)
+-- showTutorial: tampilkan label petunjuk, masing-masing jenis HANYA SEKALI
+function TrackStreamer.new(seed: number, lowDetail: boolean?, showTutorial: boolean?)
 	local self = setmetatable({}, TrackStreamer)
 	self._gen = TrackGenerator.new(seed)
 	self._decoRng = Random.new(seed + 7919)
 	self._low = lowDetail == true
+	self._hintsLeft = if showTutorial then { jump = true, gap = true, longGap = true } else {}
 	self._view = if self._low then GameConfig.ViewDistanceLow else GameConfig.ViewDistance
 	self._buckets = {}
 	self._cleanedBucket = -2
@@ -297,6 +300,107 @@ function TrackStreamer:_floorPiece(s: number, e: number)
 		end
 		post += 12
 	end
+
+	-- tali bendera warna-warni melintang di atas jalan tiap 72 studs
+	local bunting = math.ceil(s / 72) * 72
+	while bunting <= e - 0.5 do
+		if bunting > 0 then
+			self:_buildBunting(bunting, e)
+		end
+		bunting += 72
+	end
+
+	-- bunga kecil di kaki pagar
+	if not self._low then
+		local rng = self._decoRng
+		local fd = s + rng:NextNumber(1, 5)
+		while fd < e - 0.5 do
+			local side = if rng:NextNumber() < 0.5 then -1 else 1
+			local x = side * (W / 2 - 0.35 - rng:NextNumber(0, 0.2))
+			self:_track(
+				blob({
+					Name = "Bush",
+					Size = Vector3.new(1.4, 0.9, 1.6),
+					CFrame = CFrame.new(x, Y + 0.6, -fd),
+					Color = C.Leaf,
+				}),
+				e
+			)
+			self:_track(
+				blob({
+					Name = "Flower",
+					Size = Vector3.new(0.5, 0.5, 0.5),
+					CFrame = CFrame.new(x, Y + 1.15, -fd + 0.2),
+					Color = C.Flags[rng:NextInteger(1, #C.Flags)],
+				}),
+				e
+			)
+			fd += rng:NextNumber(7, 16)
+		end
+	end
+end
+
+function TrackStreamer:_buildBunting(d: number, endD: number)
+	local poleH = 8
+	for _, side in ipairs({ -1, 1 }) do
+		self:_track(
+			part({
+				Name = "BuntingPole",
+				Size = Vector3.new(0.4, poleH, 0.4),
+				CFrame = CFrame.new(side * (W / 2 - 0.35), Y + poleH / 2, -d),
+				Color = C.WoodDark,
+				Material = WOOD,
+			}),
+			endD
+		)
+	end
+	-- tali melengkung + bendera kecil yang tergantung di tali
+	local count = 11
+	local ropeTop = Y + poleH - 0.3
+	local halfSpan = W / 2 - 0.35
+	local function ropeY(x: number): number
+		local u = x / halfSpan -- -1..1
+		return ropeTop - 1.6 * (1 - u * u)
+	end
+
+	local points = { Vector3.new(-halfSpan, ropeY(-halfSpan), -d) }
+	local flags = {}
+	local bases = {}
+	for i = 0, count - 1 do
+		local x = -halfSpan + (i + 0.5) / count * (2 * halfSpan)
+		local top = ropeY(x)
+		table.insert(points, Vector3.new(x, top, -d))
+		local flag = self:_track(
+			part({
+				Name = "BuntingFlag",
+				Size = Vector3.new(0.9, 0.9, 0.06),
+				-- belah ketupat diputar 45°, sudut atasnya menempel di tali
+				CFrame = CFrame.new(x, top - 0.64, -d) * CFrame.Angles(0, 0, math.rad(45)),
+				Color = C.Flags[(i % #C.Flags) + 1],
+			}),
+			endD
+		)
+		table.insert(flags, flag)
+		table.insert(bases, flag.CFrame)
+	end
+	table.insert(points, Vector3.new(halfSpan, ropeY(halfSpan), -d))
+
+	for i = 1, #points - 1 do
+		local a, b = points[i], points[i + 1]
+		self:_track(
+			part({
+				Name = "BuntingRope",
+				Size = Vector3.new(0.1, 0.1, (b - a).Magnitude + 0.05),
+				CFrame = CFrame.lookAt((a + b) / 2, b),
+				Color = C.Rope,
+			}),
+			endD
+		)
+	end
+
+	if not self._low then
+		table.insert(self._animated, { kind = "Sway", parts = flags, base = bases, phase = d * 0.1 })
+	end
 end
 
 function TrackStreamer:_buildFloor(from: number, to: number)
@@ -378,9 +482,11 @@ function TrackStreamer:_buildGap(f)
 	end
 
 	local mid = f.z + f.length / 2
-	if f.long and f.z < GameConfig.TutorialUntil * 1.6 then
+	if f.long and self._hintsLeft.longGap then
+		self._hintsLeft.longGap = nil
 		self:_label(mid, Locale.Get("jump_dash"), Color3.fromRGB(235, 245, 255), endD, group)
-	elseif not f.long and f.z < GameConfig.TutorialUntil then
+	elseif not f.long and self._hintsLeft.gap then
+		self._hintsLeft.gap = nil
 		self:_label(mid, Locale.Get("jump"), Color3.fromRGB(255, 244, 225), endD, group)
 	end
 end
@@ -438,7 +544,8 @@ function TrackStreamer:_buildCrates(f)
 	end
 
 	self:_hazard(Vector3.new(W, 3.0, len - 0.4), CFrame.new(0, Y + 1.5, cz), endD, group)
-	if f.z < 400 then
+	if self._hintsLeft.jump then
+		self._hintsLeft.jump = nil
 		self:_label(f.z, Locale.Get("jump"), Color3.fromRGB(255, 244, 225), endD, group)
 	end
 end
@@ -641,7 +748,10 @@ function TrackStreamer:_island(center: Vector3, scale: number, endD: number)
 		}),
 		endD
 	)
-	if rng:NextNumber() < 0.75 then
+	local roll = rng:NextNumber()
+	if roll < 0.28 and not self._low then
+		self:_windmill(center + Vector3.new(0, 0.8 * s, 0), s, endD)
+	elseif roll < 0.9 then
 		local tx = center + Vector3.new(rng:NextNumber(-2, 2) * s, 0, rng:NextNumber(-2, 2) * s)
 		self:_track(
 			part({
@@ -662,6 +772,85 @@ function TrackStreamer:_island(center: Vector3, scale: number, endD: number)
 			endD
 		)
 	end
+
+	-- bunga warna-warni di atas rumput
+	if not self._low then
+		for _ = 1, rng:NextInteger(3, 6) do
+			self:_track(
+				blob({
+					Name = "IslandFlower",
+					Size = Vector3.new(0.7, 0.7, 0.7) * s,
+					CFrame = CFrame.new(center + Vector3.new(rng:NextNumber(-4, 4) * s, 0.9 * s, rng:NextNumber(-4, 4) * s)),
+					Color = C.Flags[rng:NextInteger(1, #C.Flags)],
+				}),
+				endD
+			)
+		end
+	end
+end
+
+function TrackStreamer:_windmill(base: Vector3, s: number, endD: number)
+	local towerH = 8 * s
+	self:_track(
+		part({
+			Name = "MillTower",
+			Size = Vector3.new(2.6, towerH, 2.6) * Vector3.new(s, 1, s),
+			CFrame = CFrame.new(base + Vector3.new(0, towerH / 2, 0)),
+			Color = C.PathA,
+		}),
+		endD
+	)
+	self:_track(
+		blob({
+			Name = "MillRoof",
+			Size = Vector3.new(3.6, 2.6, 3.6) * s,
+			CFrame = CFrame.new(base + Vector3.new(0, towerH + 0.6 * s, 0)),
+			Color = C.Obstacle,
+		}),
+		endD
+	)
+
+	-- baling-baling menghadap jalan (jalan ada di x = 0)
+	local hubPos = base + Vector3.new(0, towerH - 0.6 * s, 0)
+	local toward = Vector3.new(-math.sign(hubPos.X), 0, 0)
+	if toward.Magnitude < 0.5 then
+		toward = Vector3.new(1, 0, 0)
+	end
+	hubPos += toward * 1.6 * s
+	local hub = CFrame.lookAt(hubPos, hubPos + toward)
+
+	local blades = {}
+	local offsets = {}
+	for k = 0, 3 do
+		local offset = CFrame.Angles(0, 0, k * math.pi / 2) * CFrame.new(0, 3.2 * s, 0)
+		local blade = self:_track(
+			part({
+				Name = "MillBlade",
+				Size = Vector3.new(1.3 * s, 5.6 * s, 0.15),
+				CFrame = hub * offset,
+				Color = C.Wood,
+				Material = WOOD,
+			}),
+			endD
+		)
+		table.insert(blades, blade)
+		table.insert(offsets, offset)
+	end
+	table.insert(self._animated, {
+		kind = "Spin",
+		rotor = blades[1],
+		parts = blades,
+		offsets = offsets,
+		hub = hub,
+		speed = 0.8 + self._decoRng:NextNumber() * 0.6,
+	})
+end
+
+-- warna lautan awan mengikuti suasana zona
+function TrackStreamer:SetSkyTint(atmoColor: Color3, instant: boolean?)
+	local info = TweenInfo.new(if instant then 0 else 3, Enum.EasingStyle.Sine)
+	TweenService:Create(self.cloudSea, info, { Color = C.Cloud:Lerp(atmoColor, 0.45) }):Play()
+	TweenService:Create(self.cloudSeaHaze, info, { Color = C.CloudShade:Lerp(atmoColor, 0.6) }):Play()
 end
 
 function TrackStreamer:_balloon(center: Vector3, endD: number)
@@ -721,11 +910,11 @@ function TrackStreamer:_buildDecor(from: number, to: number)
 		self:_cloud(Vector3.new(rng:NextNumber(-20, 20), Y - rng:NextNumber(16, 34), -rng:NextNumber(from, to)), rng:NextNumber(7, 12), to)
 	end
 	-- pulau melayang
-	if rng:NextNumber() < (if low then 0.35 else 0.6) then
+	if rng:NextNumber() < (if low then 0.4 else 0.85) then
 		local side = if rng:NextNumber() < 0.5 then -1 else 1
 		self:_island(
-			Vector3.new(side * rng:NextNumber(34, 110), Y + rng:NextNumber(-22, 18), -rng:NextNumber(from, to)),
-			rng:NextNumber(0.8, 1.8),
+			Vector3.new(side * rng:NextNumber(30, 95), Y + rng:NextNumber(-20, 14), -rng:NextNumber(from, to)),
+			rng:NextNumber(1, 2.2),
 			to
 		)
 	end
@@ -812,6 +1001,23 @@ function TrackStreamer:Animate(t: number)
 					rope.CFrame = CFrame.new(rope.Position.X, ropeBottom + ropeLen / 2, a.cz)
 				end
 				a.shadow.Transparency = 0.45 + 0.45 * (lift / CRUSH_UP)
+			end
+		elseif a.kind == "Sway" then
+			if not a.parts[1].Parent then
+				table.remove(self._animated, i)
+			else
+				for j, p in ipairs(a.parts) do
+					p.CFrame = a.base[j] * CFrame.Angles(0, math.sin(t * 3 + a.phase + j * 0.7) * 0.35, 0)
+				end
+			end
+		elseif a.kind == "Spin" then
+			if not a.rotor.Parent then
+				table.remove(self._animated, i)
+			else
+				local rot = CFrame.Angles(0, 0, t * a.speed)
+				for j, p in ipairs(a.parts) do
+					p.CFrame = a.hub * rot * a.offsets[j]
+				end
 			end
 		elseif a.kind == "Balloon" then
 			if not a.parts[1].Parent then

@@ -200,7 +200,39 @@ function Effects:AttachCharacter(character: Model)
 	trail.WidthScale = NumberSequence.new(0.6, 0.1)
 	trail.Parent = root
 	self.trail = trail
+
+	-- debu tipis di kaki saat berlari
+	local old = root:FindFirstChild("OBC_Feet")
+	if old then
+		old:Destroy()
+	end
+	local feet = Instance.new("Attachment")
+	feet.Name = "OBC_Feet"
+	feet.Position = Vector3.new(0, -2.9, 0.4)
+	feet.Parent = root
+	self.runDust = emitter(feet, {
+		Enabled = true,
+		Rate = 0,
+		Texture = PUFF_TEXTURE,
+		Color = ColorSequence.new(Color3.fromRGB(236, 226, 206)),
+		Size = NumberSequence.new(0.5, 1.6),
+		Transparency = NumberSequence.new(0.6, 1),
+		Lifetime = NumberRange.new(0.3, 0.5),
+		Speed = NumberRange.new(2, 5),
+		SpreadAngle = Vector2.new(30, 30),
+		EmissionDirection = Enum.NormalId.Back,
+		Acceleration = Vector3.new(0, 2, 0),
+		Drag = 3,
+		Rotation = NumberRange.new(0, 360),
+	})
 	self:_applyColors()
+end
+
+-- dipanggil tiap frame: debu hanya saat menapak tanah sambil berlari
+function Effects:SetRunDust(onGround: boolean, speedRatio: number)
+	if self.runDust then
+		self.runDust.Rate = if onGround then (6 + speedRatio * 14) * (if self._low then 0.5 else 1) else 0
+	end
 end
 
 function Effects:_applyColors()

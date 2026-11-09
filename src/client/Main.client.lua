@@ -28,6 +28,7 @@ local TrackStreamer = require(folder:WaitForChild("TrackStreamer"))
 local Effects = require(folder:WaitForChild("Effects"))
 local CameraController = require(folder:WaitForChild("CameraController"))
 local HUD = require(folder:WaitForChild("HUD"))
+local Ambience = require(folder:WaitForChild("Ambience"))
 
 local RunStarted = Remotes.Get("RunStarted")
 local RunEnded = Remotes.Get("RunEnded")
@@ -51,6 +52,7 @@ local lowDetail = InputController.IsLowEndDevice()
 local hud = HUD.new()
 local effects = Effects.new(lowDetail)
 local camera = CameraController.new()
+local ambience = Ambience.new(lowDetail)
 local input = InputController.new()
 input:Start()
 input:Enable()
@@ -70,6 +72,10 @@ local crashTime = 0
 local currentZone = 0
 local nextMilestone = GameConfig.MilestoneEvery
 local muted = false
+-- label petunjuk hanya di run pertama sesi ini (tiap jenis rintangan sekali)
+local tutorialPending = true
+
+local NIGHT_LEVEL = { zone_night = 1, zone_sunset = 0.35, zone_dawn = 0.15 }
 
 -- ===== matikan kontrol bawaan Roblox (WASD, joystick HP) =====
 local function disableDefaultControls()
@@ -152,6 +158,10 @@ local function applyZone(zone, index: number, announce: boolean, instant: boolea
 
 	effects:SetAccent(zone.Accent)
 	hud:SetAccent(zone.Accent)
+	ambience:SetNight(NIGHT_LEVEL[zone.Key] or 0)
+	if streamer then
+		streamer:SetSkyTint(zone.AtmoColor, instant)
+	end
 	if announce then
 		hud:Popup(Locale.Get("zone", index + 1) .. "  ·  " .. Locale.Get(zone.Key))
 		effects:Play("Milestone", 0.8)
@@ -169,7 +179,7 @@ local function buildFreshTrack()
 	if streamer then
 		streamer:Destroy()
 	end
-	streamer = TrackStreamer.new(Random.new():NextInteger(1, 1000000000), lowDetail)
+	streamer = TrackStreamer.new(Random.new():NextInteger(1, 1000000000), lowDetail, tutorialPending)
 	streamer:Update(0)
 	if runner then
 		runner:SetHazardFolder(streamer.hazardFolder)
@@ -217,6 +227,7 @@ local function startCountdown(isRevive: boolean, tickTime: number)
 		runner:Run()
 		effects:SetRunning(true)
 		if not isRevive then
+			tutorialPending = false
 			RunStarted:FireServer()
 		end
 	end)
@@ -418,7 +429,10 @@ RunService.RenderStepped:Connect(function(dt)
 	local running = state == "Running"
 	local r = if running then runner:GetSpeedRatio() else 0
 	camera:SetSpeedRatio(r)
-	effects:Update(dt, Workspace.CurrentCamera.CFrame, r)
+	local camCF = Workspace.CurrentCamera.CFrame
+	effects:Update(dt, camCF, r)
+	effects:SetRunDust(runner:IsOnGround(), r)
+	ambience:Update(camCF, math.max(runner.distance, 0), state ~= "Loading")
 
 	if running then
 		local score = runner:GetScore()

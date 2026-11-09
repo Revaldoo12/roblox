@@ -1,72 +1,84 @@
-# 🎮 One Button Chaos
+# One Button Chaos
 
-Endless runner Roblox bertema **kota neon malam hari**. Karakter lari otomatis dan makin cepat. Kamu cuma punya **satu tombol** (Space / klik / tap / tombol A gamepad):
+Endless runner di atas awan. Karakter berlari sendiri di jalan setapak batu yang melayang di langit, makin lama makin cepat. Kamu cuma punya **satu tombol**:
 
-- **Di tanah → LOMPAT**
-- **Di udara → DASH** (melesat + melayang, 1x per lompatan, untuk menyeberangi jurang panjang)
+- **Di tanah → lompat**
+- **Di udara → dash** (melesat dan melayang sebentar, 1x per lompatan, untuk menyeberangi jurang panjang)
 
-## ✨ Isi game
+## Isi game
 
 | Bagian | Isi |
 |---|---|
-| Lintasan | Endless, dibangun terus di depan pemain: lantai kaca gelap, rel neon, garis grid, gerbang neon, gedung kota cyber, grid synthwave di bawah |
-| Zona | Warna dunia berganti tiap 800 studs: Neon City → Sunset Drive → Toxic Grid → Void Palace → Overdrive |
-| Rintangan | Dinding neon (lompat), pagar laser (lompat), jurang pendek (lompat), jurang panjang (lompat + dash), dinding ganda, dinding + jurang, crusher yang menghantam (timing) |
-| Keadilan | Jarak rintangan dihitung dari fisika lompat & dash pada kecepatan saat itu, jadi selalu bisa dilewati. Hitbox sedikit lebih kecil dari visual. Ada coyote time & jump buffer |
-| Efek | Trail neon, cahaya karakter, debu lompat, percikan dash, ledakan + serpihan saat crash, partikel angin, kamera FOV melebar saat ngebut, guncangan kamera, flash layar |
-| UI | Layar judul animasi, kartu cara main, hitung mundur 3-2-1-GO, skor + bar kecepatan, popup zona & milestone, kartu Game Over (NEW BEST, Main Lagi, Revive), papan peringkat Top 10 |
-| Petunjuk | Label "LOMPAT ⬆" / "LOMPAT + DASH ⚡" muncul di awal permainan sebagai tutorial |
+| Dunia | Jalan batu krem dengan pagar tali kayu dan lentera, lautan awan di bawah, awan dinamis Roblox, pulau melayang dengan pohon, balon udara |
+| Waktu langit | Berganti tiap 800 m: Fajar → Langit Cerah → Jam Emas → Senja → Cahaya Bintang, transisi halus |
+| Rintangan | Peti kayu (lompat), pagar tanaman (lompat), jurang bertanda bendera (lompat, yang panjang lompat + dash), balok batu yang turun-naik (timing) |
+| Keadilan | Jarak rintangan dihitung dari fisika lompat & dash pada kecepatan saat itu. Hitbox sedikit lebih kecil dari visual. Ada coyote time & jump buffer |
+| Avatar | **R6 only**. Baju, warna kulit, dan aksesori pemain tetap dipakai. Animasi lari ikut kecepatan |
+| Bahasa | Otomatis ikut setting bahasa Roblox pemain. 15 bahasa: en, id, es, pt, fr, de, it, ru, tr, ja, ko, zh-cn, zh-tw, th, vi. Bahasa lain → Inggris |
+| Perangkat | PC (Spasi/W/Panah Atas/klik), HP & tablet (ketuk di mana saja), gamepad Xbox/PlayStation (A atau R2). Petunjuk di layar ikut perangkat yang sedang dipakai |
+| UI | Menu, cara main, hitung mundur, skor + bar kecepatan, popup zona & milestone, kartu game over, papan peringkat Top 10, tombol suara |
 
-## 📂 Struktur
+## Struktur
 
 ```
 src/
 ├── shared/                    (ReplicatedStorage.Shared)
-│   ├── GameConfig.lua          tuning, palet warna, suara, ID monetisasi
+│   ├── GameConfig.lua          tuning, warna, zona langit, suara, ID monetisasi
+│   ├── Locale.lua              teks 15 bahasa + deteksi bahasa
 │   ├── TrackGenerator.lua      pola rintangan deterministik & adil
 │   └── Remotes.lua             RemoteEvent
 ├── client/                    (StarterPlayerScripts.Client)
-│   ├── Main.client.lua         state machine: Menu → Countdown → Lari → Game Over
-│   ├── InputController.lua     satu input lintas-platform
-│   ├── PlayerRunner.lua        gerak, lompat, dash, deteksi tabrakan
-│   ├── TrackStreamer.lua       bangun/hapus lintasan, rintangan, dekorasi
-│   ├── Effects.lua             suara, partikel, trail
-│   ├── CameraController.lua    kamera sinematik
+│   ├── Main.client.lua         alur game: Menu → Countdown → Lari → Game Over
+│   ├── InputController.lua     satu tombol untuk semua perangkat + deteksi perangkat
+│   ├── PlayerRunner.lua        gerak, lompat, dash, tabrakan
+│   ├── RunnerAnimator.lua      animasi R6
+│   ├── TrackStreamer.lua       jalan, rintangan, dekorasi langit
+│   ├── Effects.lua             suara & partikel
+│   ├── CameraController.lua    kamera
 │   └── HUD.lua                 semua UI
 └── server/                    (ServerScriptService.Server)
     ├── Main.server.lua         validasi skor + high score
-    ├── Environment.lua         lighting neon, platform start, collision group
+    ├── Environment.lua         langit, cahaya, pulau start
+    ├── Characters.lua          spawn karakter R6
     ├── Monetization.lua        Game Pass & Developer Product
     └── GlobalLeaderboard.lua   papan peringkat global
 ```
 
-## 🚀 Menjalankan
+## Menjalankan
 
-1. Di folder project: `rojo serve` (atau `.\rojo.exe serve` di Windows).
+1. Di folder project: `git pull`, lalu `.\rojo.exe serve` (Windows) atau `rojo serve`.
 2. Roblox Studio → **New → Baseplate** → Plugins → **Rojo → Connect**.
 3. Tekan **Play**.
 
-> Saat server mulai, `Environment.lua` **menghapus Baseplate & SpawnLocation bawaan template** supaya jurang benar-benar bisa bikin jatuh. Ini disengaja.
+Catatan:
+- Saat server mulai, Baseplate & SpawnLocation bawaan template **dihapus otomatis** supaya jurang benar-benar bisa bikin jatuh.
+- Kalau masih memakai place lama, hapus skrip yang sudah tidak ada di daftar di atas (mis. `TrackBuilder`, `ObstacleGenerator`).
+- R6 sudah dipaksa lewat script. Supaya konsisten di halaman game juga, set **Game Settings → Avatar → Avatar Type: R6**.
 
-Kalau sebelumnya sudah sync versi lama, hapus skrip lama yang tersisa di Studio (`TrackBuilder`, `ObstacleGenerator`) bila masih ada.
+## Tes bahasa & perangkat di Studio
 
-## 🎛️ Tuning
+- **Bahasa:** isi `Locale.ForceLanguage = "ja"` (atau kode lain) di `src/shared/Locale.lua`, tekan Play, lalu kembalikan ke `nil`. Bisa juga lewat tab **Test → Player Emulator → Locale**.
+- **HP/tablet:** tab **Test → Device**, pilih HP. Ketuk layar untuk mulai.
+- **Gamepad:** colok gamepad, tekan A.
 
-Semua angka ada di `src/shared/GameConfig.lua`: kecepatan, lompat, dash, panjang zona, warna, suara. Suara memakai file bawaan Roblox (`rbxasset://sounds/...`). Untuk musik, isi `MusicId` dengan ID musik berlisensi dari Creator Store.
+## Tuning
 
-## 💰 Monetisasi
+Semua angka ada di `src/shared/GameConfig.lua`: kecepatan, lompat, dash, panjang zona, warna, waktu langit, suara. Suara memakai file bawaan Roblox. Untuk musik, isi `MusicId` dengan ID musik berlisensi dari Creator Store.
+
+## Monetisasi
 
 Isi ID di `GameConfig.lua` (0 = tombol disembunyikan):
 
 - `GamePassIds.DoubleScore`: skor resmi x2 (dihitung di server)
-- `GamePassIds.RainbowTrail`: trail pelangi
-- `ProductIds.Revive`: lanjut dari titik crash, 1x per run. Receipt dicatat di DataStore agar tidak diproses dua kali.
+- `GamePassIds.RainbowTrail`: jejak pelangi pastel
+- `ProductIds.Revive`: lanjut dari titik jatuh, 1x per run. Receipt dicatat di DataStore agar tidak diproses dua kali.
 
-## ✅ Checklist publish
+## Checklist publish
 
-- [ ] Game Settings → Security → **Enable Studio Access to API Services** (high score & leaderboard)
-- [ ] Tes di emulator HP (Test → Device) — tap harus jalan
-- [ ] Ikon & thumbnail menarik (screenshot zona neon + crash)
-- [ ] Judul/deskripsi dengan kata kunci: "one button", "hard", "runner", "rage"
+- [ ] Game Settings → Security → **Enable Studio Access to API Services**
+- [ ] Game Settings → Avatar → **R6**
+- [ ] Tes di emulator HP & dengan gamepad
+- [ ] Ikon & thumbnail (screenshot jalan di atas awan saat Jam Emas)
+- [ ] Judul & deskripsi (bisa ditulis dalam beberapa bahasa di Creator Hub → Localization)
 - [ ] Isi ID Game Pass / Product kalau mau monetisasi
 - [ ] File → Publish to Roblox → set **Public**

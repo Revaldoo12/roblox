@@ -12,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local TrackGenerator = require(Shared:WaitForChild("TrackGenerator"))
+local RunnerAnimator = require(script.Parent:WaitForChild("RunnerAnimator"))
 
 local PlayerRunner = {}
 PlayerRunner.__index = PlayerRunner
@@ -56,6 +57,8 @@ function PlayerRunner.new(character: Model)
 	for _, st in ipairs(DISABLED_STATES) do
 		h:SetStateEnabled(st, false)
 	end
+
+	self.animator = RunnerAnimator.new(character, h)
 
 	self._overlap = OverlapParams.new()
 	self._overlap.FilterType = Enum.RaycastFilterType.Include
@@ -240,7 +243,24 @@ function PlayerRunner:GetSpeedRatio(): number
 	)
 end
 
+-- Dipanggil tiap frame di semua state (menu, countdown, lari, crash)
+function PlayerRunner:UpdateAnimation()
+	if self.state ~= "Running" then
+		self.animator:Update("Idle", 0)
+		return
+	end
+	local now = os.clock()
+	if self:_isGrounded(now) then
+		self.animator:Update("Run", self.speed)
+	elseif self.root.AssemblyLinearVelocity.Y > 2 or now < self.dashEnd then
+		self.animator:Update("Jump", 0)
+	else
+		self.animator:Update("Fall", 0)
+	end
+end
+
 function PlayerRunner:Destroy()
+	self.animator:Destroy()
 	self.state = "Dead"
 	self.OnJump, self.OnDash, self.OnLand, self.OnCrash = nil, nil, nil, nil
 end

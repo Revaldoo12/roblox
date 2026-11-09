@@ -2,7 +2,8 @@
 	Main.client.lua
 	State machine game:
 	  Menu -> Countdown -> Running -> GameOver -> (tap) Countdown ...
-	Restart instan tanpa respawn karakter supaya loop "sekali lagi!" terasa cepat.
+	Restart instan tanpa respawn karakter supaya loop "sekali lagi" terasa cepat.
+	Waktu di langit berganti per zona (fajar -> siang -> sore -> senja -> malam).
 --]]
 
 local Players = game:GetService("Players")
@@ -10,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local StarterGui = game:GetService("StarterGui")
+local GuiService = game:GetService("GuiService")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
@@ -17,6 +19,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local Locale = require(Shared:WaitForChild("Locale"))
 
 local folder = script.Parent
 local InputController = require(folder:WaitForChild("InputController"))
@@ -34,13 +37,27 @@ local GrantRevive = Remotes.Get("GrantRevive")
 local PerksUpdated = Remotes.Get("PerksUpdated")
 
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
 
+Locale.Init()
+
+-- HP & tablet: paksa landscape, sembunyikan tombol sentuh bawaan
+playerGui.ScreenOrientation = Enum.ScreenOrientation.LandscapeSensor
+pcall(function()
+	GuiService.TouchControlsEnabled = false
+end)
+
+local lowDetail = InputController.IsLowEndDevice()
 local hud = HUD.new()
-local effects = Effects.new()
+local effects = Effects.new(lowDetail)
 local camera = CameraController.new()
 local input = InputController.new()
 input:Start()
 input:Enable()
+hud:SetDevice(input.device)
+input:OnDeviceChanged(function(device)
+	hud:SetDevice(device)
+end)
 
 local state = "Loading"
 local runner = nil
@@ -52,12 +69,13 @@ local usedRevive = false
 local crashTime = 0
 local currentZone = 0
 local nextMilestone = GameConfig.MilestoneEvery
+local muted = false
 
--- ===== matikan kontrol bawaan Roblox (WASD, tombol lompat HP) =====
+-- ===== matikan kontrol bawaan Roblox (WASD, joystick HP) =====
 local function disableDefaultControls()
 	task.spawn(function()
 		local ok, err = pcall(function()
-			local playerModule = require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
+			local playerModule = require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule") :: any)
 			playerModule:GetControls():Disable()
 		end)
 		if not ok then
@@ -78,7 +96,7 @@ task.spawn(function()
 	end
 end)
 
--- ===== sembunyikan pemain lain (tiap pemain punya lintasan sendiri) =====
+-- ===== sembunyikan pemain lain (tiap pemain punya jalan sendiri) =====
 task.spawn(function()
 	while true do
 		for _, other in ipairs(Players:GetPlayers()) do
@@ -99,27 +117,51 @@ task.spawn(function()
 	end
 end)
 
--- ===== palet zona =====
-local function applyPalette(pal, zone: number, announce: boolean)
-	effects:SetPalette(pal)
-	hud:SetPalette(pal)
+-- ===== waktu langit per zona =====
+local clockValue = Instance.new("NumberValue")
+clockValue.Value = Lighting.ClockTime
+clockValue.Changed:Connect(function(v)
+	Lighting.ClockTime = v % 24
+end)
+
+local function applyZone(zone, index: number, announce: boolean, instant: boolean)
+	local duration = if instant then 0 else 3
+	local info = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+
+	-- jam selalu maju (tidak mundur melewati siang)
+	local current = clockValue.Value % 24
+	local delta = (zone.ClockTime - current) % 24
+	clockValue.Value = current
+	TweenService:Create(clockValue, info, { Value = current + delta }):Play()
+
+	TweenService:Create(Lighting, info, {
+		Brightness = zone.Brightness,
+		Ambient = zone.Ambient,
+		OutdoorAmbient = zone.Ambient,
+	}):Play()
 	local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
 	if atmo then
-		TweenService:Create(atmo, TweenInfo.new(2), {
-			Color = pal.Fog,
-			Decay = pal.Fog:Lerp(Color3.new(0, 0, 0), 0.5),
-		}):Play()
+		TweenService:Create(atmo, info, { Color = zone.AtmoColor, Decay = zone.AtmoDecay }):Play()
 	end
+	local terrain = Workspace:FindFirstChildOfClass("Terrain")
+	local clouds = terrain and terrain:FindFirstChildOfClass("Clouds")
+	if clouds then
+		local cloudColor = Color3.fromRGB(255, 255, 255):Lerp(zone.AtmoColor, 0.35)
+		TweenService:Create(clouds, info, { Color = cloudColor }):Play()
+	end
+
+	effects:SetAccent(zone.Accent)
+	hud:SetAccent(zone.Accent)
 	if announce then
-		hud:Popup(("ZONA %d • %s"):format(zone + 1, pal.Name), pal.Primary)
+		hud:Popup(Locale.Get("zone", index + 1) .. "  ·  " .. Locale.Get(zone.Key))
 		effects:Play("Milestone", 0.8)
 	end
 end
 
-local function resetZone()
+local function resetZone(instant: boolean)
 	currentZone = 0
 	nextMilestone = GameConfig.MilestoneEvery
-	applyPalette(GameConfig.Palettes[1], 0, false)
+	applyZone(GameConfig.Zones[1], 0, false, instant)
 end
 
 -- ===== alur game =====
@@ -127,24 +169,24 @@ local function buildFreshTrack()
 	if streamer then
 		streamer:Destroy()
 	end
-	streamer = TrackStreamer.new(Random.new():NextInteger(1, 1000000000))
+	streamer = TrackStreamer.new(Random.new():NextInteger(1, 1000000000), lowDetail)
 	streamer:Update(0)
 	if runner then
 		runner:SetHazardFolder(streamer.hazardFolder)
 	end
 end
 
-local function prepareNewRun()
+local function prepareNewRun(instantSky: boolean)
 	buildFreshTrack()
 	runner:ResetToStart()
 	usedRevive = false
-	resetZone()
+	resetZone(instantSky)
 end
 
 local function enterMenu()
 	token += 1
 	state = "Menu"
-	prepareNewRun()
+	prepareNewRun(true)
 	camera:SetMode("Menu")
 	effects:SetRunning(false)
 	hud:ShowMenu(best)
@@ -169,7 +211,7 @@ local function startCountdown(isRevive: boolean, tickTime: number)
 		if token ~= myToken then
 			return
 		end
-		hud:Countdown("GO!")
+		hud:Countdown(Locale.Get("go"))
 		effects:Play("Go", 1.5)
 		state = "Running"
 		runner:Run()
@@ -182,7 +224,7 @@ end
 
 local function restart()
 	effects:Play("Click")
-	prepareNewRun()
+	prepareNewRun(false)
 	startCountdown(false, 0.4)
 end
 
@@ -192,7 +234,7 @@ local function onCrash(reason: string, pos: Vector3)
 	effects:SetRunning(false)
 	effects:Crash(pos)
 	camera:SetMode("Crash", pos)
-	camera:Shake(2.2)
+	camera:Shake(0.6)
 	hud:Flash()
 
 	local score = runner:GetScore()
@@ -202,7 +244,7 @@ local function onCrash(reason: string, pos: Vector3)
 
 	local canRevive = GameConfig.ProductIds.Revive ~= 0 and not usedRevive
 	local myToken = token
-	task.delay(0.55, function()
+	task.delay(0.6, function()
 		if token == myToken and state == "GameOver" then
 			hud:ShowGameOver({
 				score = score,
@@ -211,6 +253,9 @@ local function onCrash(reason: string, pos: Vector3)
 				reason = reason,
 				canRevive = canRevive,
 			})
+			if input.device == "pad" then
+				GuiService.SelectedObject = hud.playBtn
+			end
 		end
 	end)
 end
@@ -223,7 +268,8 @@ input:OnAction(function()
 	elseif state == "Running" then
 		runner:DoAction()
 	elseif state == "GameOver" then
-		if os.clock() - crashTime > 0.7 then
+		if os.clock() - crashTime > 0.8 then
+			GuiService.SelectedObject = nil
 			restart()
 		end
 	end
@@ -234,6 +280,7 @@ hud.OnClick = function()
 end
 hud.OnPlay = function()
 	if state == "GameOver" then
+		GuiService.SelectedObject = nil
 		restart()
 	end
 end
@@ -255,6 +302,11 @@ hud.OnBuyRainbow = function()
 		MarketplaceService:PromptGamePassPurchase(player, id)
 	end
 end
+hud.OnToggleSound = function()
+	muted = not muted
+	effects:SetMuted(muted)
+	hud:SetMuted(muted)
+end
 
 -- ===== event dari server =====
 ScoreValidated.OnClientEvent:Connect(function(official, accepted, serverBest)
@@ -262,7 +314,7 @@ ScoreValidated.OnClientEvent:Connect(function(official, accepted, serverBest)
 		best = math.max(best, serverBest)
 		hud:SetBest(best)
 	end
-	if accepted and perks.doubleScore then
+	if accepted and perks.doubleScore and typeof(official) == "number" then
 		hud:SetOfficialScore(official, true)
 	end
 end)
@@ -286,9 +338,10 @@ GrantRevive.OnClientEvent:Connect(function()
 		return
 	end
 	usedRevive = true
+	GuiService.SelectedObject = nil
 	local safeD = streamer:PrepareRevive(runner.distance)
 	runner:Revive(safeD)
-	hud:Popup("❤ REVIVE!", Color3.fromRGB(255, 90, 150))
+	hud:Popup(Locale.Get("revived"))
 	startCountdown(true, 0.5)
 end)
 
@@ -321,8 +374,7 @@ local function onCharacter(character: Model)
 	end
 	runner.OnDash = function(pos)
 		effects:Dash(pos)
-		camera:Punch(10)
-		camera:Shake(0.35)
+		camera:Punch(4)
 	end
 	runner.OnCrash = onCrash
 
@@ -345,6 +397,9 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 	if state == "Running" then
 		runner:Update(dt)
+	end
+	if runner.state ~= "Dead" then
+		runner:UpdateAnimation()
 	end
 	if streamer then
 		streamer:Update(math.max(runner.distance, 0))
@@ -370,13 +425,13 @@ RunService.RenderStepped:Connect(function(dt)
 		hud:SetScore(score)
 		hud:SetSpeedRatio(r)
 
-		local pal, zone = GameConfig.GetPalette(runner.distance)
-		if zone ~= currentZone then
-			currentZone = zone
-			applyPalette(pal, zone, true)
+		local zone, index = GameConfig.GetZone(runner.distance)
+		if index ~= currentZone then
+			currentZone = index
+			applyZone(zone, index, true, false)
 		end
 		if score >= nextMilestone then
-			hud:Popup(("%d!"):format(nextMilestone), GameConfig.GapColor)
+			hud:Popup(Locale.Get("milestone", nextMilestone))
 			hud:PulseScore()
 			effects:Play("Milestone", 1.2)
 			nextMilestone += GameConfig.MilestoneEvery

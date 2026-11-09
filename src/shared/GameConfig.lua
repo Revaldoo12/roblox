@@ -1,19 +1,23 @@
 --[[
 	GameConfig.lua
 	Semua angka tuning, warna, suara, dan ID monetisasi ada di sini.
+	Tema: jalan setapak di atas awan. Warna hangat & lembut, tanpa neon.
 --]]
 
 local GameConfig = {}
 
--- ===== DUNIA =====
-GameConfig.TrackY = 100 -- tinggi permukaan lintasan (melayang di atas jurang)
-GameConfig.TrackWidth = 14
-GameConfig.KillY = GameConfig.TrackY - 25 -- jatuh di bawah ini = crash
-GameConfig.Gravity = 130
-GameConfig.ViewDistance = 520 -- seberapa jauh lintasan dibangun di depan pemain
-GameConfig.CleanupBehind = 80 -- bagian lintasan di belakang pemain yang dihapus
+GameConfig.GameTitle = "ONE BUTTON CHAOS"
 
--- ===== KECEPATAN (dihitung dari jarak, jadi pola rintangan selalu adil) =====
+-- ===== DUNIA =====
+GameConfig.TrackY = 100 -- tinggi permukaan jalan
+GameConfig.TrackWidth = 14
+GameConfig.KillY = GameConfig.TrackY - 25 -- jatuh di bawah ini = gagal
+GameConfig.Gravity = 130
+GameConfig.ViewDistance = 520 -- jarak jalan dibangun di depan pemain (PC/konsol)
+GameConfig.ViewDistanceLow = 380 -- untuk perangkat ringan (HP)
+GameConfig.CleanupBehind = 80
+
+-- ===== KECEPATAN (dihitung dari jarak agar pola rintangan selalu adil) =====
 GameConfig.StartSpeed = 26
 GameConfig.MaxSpeed = 80
 GameConfig.SpeedRamp = 0.8
@@ -22,82 +26,127 @@ GameConfig.SpeedRamp = 0.8
 GameConfig.JumpPower = 48
 GameConfig.DashSpeedBonus = 40
 GameConfig.DashDuration = 0.35
-GameConfig.CoyoteTime = 0.1 -- masih bisa lompat sesaat setelah lewat tepi
-GameConfig.JumpBuffer = 0.12 -- tekan sesaat sebelum mendarat = langsung lompat
+GameConfig.CoyoteTime = 0.1
+GameConfig.JumpBuffer = 0.12
 GameConfig.ActionCooldown = 0.06
 
 -- ===== RINTANGAN =====
 GameConfig.SafeStartDistance = 70
 GameConfig.DifficultyFullDistance = 5000
-GameConfig.TutorialUntil = 900 -- label petunjuk muncul sampai jarak ini
+GameConfig.TutorialUntil = 900
 
 -- ===== SKOR =====
 GameConfig.MilestoneEvery = 1000
 
--- ===== VISUAL =====
-GameConfig.ZoneLength = 800
-GameConfig.HazardColor = Color3.fromRGB(255, 40, 90)
-GameConfig.GapColor = Color3.fromRGB(255, 214, 10)
-GameConfig.CrusherColor = Color3.fromRGB(255, 150, 0)
+-- ===== MATERIAL & WARNA (lembut, hangat) =====
+GameConfig.Colors = {
+	PathA = Color3.fromRGB(236, 228, 212), -- batu krem
+	PathB = Color3.fromRGB(226, 216, 198),
+	PathEdge = Color3.fromRGB(196, 182, 160),
+	Wood = Color3.fromRGB(168, 124, 92),
+	WoodDark = Color3.fromRGB(128, 92, 70),
+	Rope = Color3.fromRGB(214, 196, 160),
+	Cloud = Color3.fromRGB(250, 250, 252),
+	CloudShade = Color3.fromRGB(228, 234, 244),
+	Grass = Color3.fromRGB(150, 196, 132),
+	GrassDark = Color3.fromRGB(122, 170, 112),
+	Rock = Color3.fromRGB(176, 164, 152),
+	RockDark = Color3.fromRGB(142, 132, 124),
+	Leaf = Color3.fromRGB(132, 184, 120),
+	LeafLight = Color3.fromRGB(170, 210, 140),
 
-GameConfig.Palettes = {
-	{
-		Name = "NEON CITY",
-		Primary = Color3.fromRGB(0, 229, 255),
-		Secondary = Color3.fromRGB(255, 0, 200),
-		Floor = Color3.fromRGB(14, 16, 34),
-		Fog = Color3.fromRGB(70, 30, 130),
+	-- rintangan: cukup kontras dengan jalan, tapi tetap kalem
+	Obstacle = Color3.fromRGB(206, 122, 98), -- terakota
+	ObstacleTrim = Color3.fromRGB(244, 226, 196),
+	Stone = Color3.fromRGB(124, 128, 140),
+	StoneTrim = Color3.fromRGB(210, 150, 110),
+	Warning = Color3.fromRGB(232, 170, 96), -- bendera/tanda di tepi jurang
+	Flags = {
+		Color3.fromRGB(232, 140, 120),
+		Color3.fromRGB(240, 206, 120),
+		Color3.fromRGB(140, 196, 170),
+		Color3.fromRGB(140, 170, 220),
 	},
-	{
-		Name = "SUNSET DRIVE",
-		Primary = Color3.fromRGB(255, 140, 0),
-		Secondary = Color3.fromRGB(255, 40, 140),
-		Floor = Color3.fromRGB(30, 14, 28),
-		Fog = Color3.fromRGB(140, 50, 80),
-	},
-	{
-		Name = "TOXIC GRID",
-		Primary = Color3.fromRGB(120, 255, 40),
-		Secondary = Color3.fromRGB(0, 255, 190),
-		Floor = Color3.fromRGB(10, 26, 20),
-		Fog = Color3.fromRGB(20, 90, 60),
-	},
-	{
-		Name = "VOID PALACE",
-		Primary = Color3.fromRGB(180, 90, 255),
-		Secondary = Color3.fromRGB(255, 210, 60),
-		Floor = Color3.fromRGB(20, 10, 36),
-		Fog = Color3.fromRGB(60, 20, 110),
-	},
-	{
-		Name = "OVERDRIVE",
-		Primary = Color3.fromRGB(255, 255, 255),
-		Secondary = Color3.fromRGB(255, 80, 40),
-		Floor = Color3.fromRGB(30, 8, 12),
-		Fog = Color3.fromRGB(120, 20, 30),
+	Balloon = {
+		Color3.fromRGB(236, 150, 130),
+		Color3.fromRGB(240, 210, 130),
+		Color3.fromRGB(150, 190, 225),
+		Color3.fromRGB(170, 205, 160),
 	},
 }
 
-function GameConfig.GetPalette(distance: number)
-	local zone = math.max(0, math.floor(distance / GameConfig.ZoneLength))
-	return GameConfig.Palettes[(zone % #GameConfig.Palettes) + 1], zone
+-- ===== ZONA (waktu di langit berganti) =====
+GameConfig.ZoneLength = 800
+
+-- Key = kunci nama di Locale.lua
+GameConfig.Zones = {
+	{
+		Key = "zone_dawn",
+		ClockTime = 6.6,
+		Accent = Color3.fromRGB(236, 160, 140),
+		AtmoColor = Color3.fromRGB(240, 200, 190),
+		AtmoDecay = Color3.fromRGB(200, 150, 160),
+		Ambient = Color3.fromRGB(150, 130, 140),
+		Brightness = 2,
+	},
+	{
+		Key = "zone_day",
+		ClockTime = 12.5,
+		Accent = Color3.fromRGB(110, 165, 225),
+		AtmoColor = Color3.fromRGB(200, 222, 245),
+		AtmoDecay = Color3.fromRGB(150, 185, 225),
+		Ambient = Color3.fromRGB(140, 150, 165),
+		Brightness = 2.4,
+	},
+	{
+		Key = "zone_golden",
+		ClockTime = 16.4,
+		Accent = Color3.fromRGB(232, 178, 98),
+		AtmoColor = Color3.fromRGB(245, 215, 170),
+		AtmoDecay = Color3.fromRGB(215, 165, 120),
+		Ambient = Color3.fromRGB(160, 140, 120),
+		Brightness = 2.2,
+	},
+	{
+		Key = "zone_sunset",
+		ClockTime = 17.7,
+		Accent = Color3.fromRGB(220, 130, 140),
+		AtmoColor = Color3.fromRGB(230, 170, 165),
+		AtmoDecay = Color3.fromRGB(150, 110, 150),
+		Ambient = Color3.fromRGB(150, 120, 135),
+		Brightness = 1.8,
+	},
+	{
+		Key = "zone_night",
+		ClockTime = 0.5,
+		Accent = Color3.fromRGB(160, 170, 230),
+		AtmoColor = Color3.fromRGB(90, 100, 140),
+		AtmoDecay = Color3.fromRGB(50, 56, 90),
+		Ambient = Color3.fromRGB(110, 115, 145),
+		Brightness = 1.2,
+	},
+}
+
+function GameConfig.GetZone(distance: number)
+	local index = math.max(0, math.floor(distance / GameConfig.ZoneLength))
+	return GameConfig.Zones[(index % #GameConfig.Zones) + 1], index
 end
 
 -- ===== SUARA =====
--- Pakai suara bawaan Roblox (rbxasset://) supaya langsung bunyi.
--- Mau ganti? Cari di Creator Store, lalu isi dengan "rbxassetid://<ID>".
+-- Suara bawaan Roblox (rbxasset://) supaya langsung bunyi.
+-- Ganti dengan "rbxassetid://<ID>" dari Creator Store kalau mau suara sendiri.
 GameConfig.Sounds = {
-	Jump = { Id = "rbxasset://sounds/action_jump.mp3", Volume = 0.5 },
-	Land = { Id = "rbxasset://sounds/action_jump_land.mp3", Volume = 0.3 },
-	Dash = { Id = "rbxasset://sounds/swoosh.wav", Volume = 0.8 },
-	Crash = { Id = "rbxasset://sounds/collide.wav", Volume = 1 },
-	Tick = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.5 },
-	Go = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.8 },
-	Milestone = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.6 },
-	Click = { Id = "rbxasset://sounds/button.wav", Volume = 0.5 },
+	Jump = { Id = "rbxasset://sounds/action_jump.mp3", Volume = 0.45 },
+	Land = { Id = "rbxasset://sounds/action_jump_land.mp3", Volume = 0.25 },
+	Dash = { Id = "rbxasset://sounds/swoosh.wav", Volume = 0.6 },
+	Crash = { Id = "rbxasset://sounds/collide.wav", Volume = 0.7 },
+	Tick = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.35 },
+	Go = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.5 },
+	Milestone = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.4 },
+	Click = { Id = "rbxasset://sounds/button.wav", Volume = 0.4 },
 }
 GameConfig.MusicId = "" -- contoh: "rbxassetid://1234567890" (musik berlisensi dari Creator Store)
-GameConfig.MusicVolume = 0.35
+GameConfig.MusicVolume = 0.3
 
 -- ===== MONETISASI =====
 -- Buat item di Creator Hub, lalu ganti 0 dengan ID-nya. 0 = tombol disembunyikan.

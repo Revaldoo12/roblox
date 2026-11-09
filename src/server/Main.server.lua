@@ -18,11 +18,13 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 
 local serverFolder = script.Parent
 local Environment = require(serverFolder:WaitForChild("Environment"))
+local Characters = require(serverFolder:WaitForChild("Characters"))
 local Monetization = require(serverFolder:WaitForChild("Monetization"))
 local GlobalLeaderboard = require(serverFolder:WaitForChild("GlobalLeaderboard"))
 
 Remotes.Init()
 Environment.Setup()
+Characters.Init()
 Monetization.Init()
 GlobalLeaderboard.Init()
 

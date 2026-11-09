@@ -82,7 +82,7 @@ function CameraController:_update(dt: number)
 		local look = Vector3.new(0, self.smoothY + 2, p.Z - 30)
 		desired = CFrame.lookAt(camPos, look)
 		k = if self.modeTime < 0.8 then 5 else 14
-		fovTarget = 70 + r * 22
+		fovTarget = 70 + r * 12
 	elseif self.mode == "Crash" then
 		local cp = self.crashPoint or p
 		desired = CFrame.lookAt(cp + Vector3.new(9, 8 + self.modeTime * 0.6, 16), cp)

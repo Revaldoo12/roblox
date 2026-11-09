@@ -145,7 +145,7 @@ GameConfig.Sounds = {
 	Milestone = { Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.4 },
 	Click = { Id = "rbxasset://sounds/button.wav", Volume = 0.4 },
 }
-GameConfig.MusicId = "" -- contoh: "rbxassetid://1234567890" (musik berlisensi dari Creator Store)
+GameConfig.MusicId = "rbxassetid://1840684529" -- "Cool Vibes" oleh APM Music (berlisensi di Roblox Creator Store)
 GameConfig.MusicVolume = 0.3
 
 -- ===== MONETISASI =====
